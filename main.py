@@ -6,13 +6,17 @@ import time
 import venv
 
 import qdarkstyle
-from PyQt5.QtCore import pyqtSlot,Qt
-from PyQt5.QtWidgets import QMainWindow,QApplication,QFileDialog,QAction,QLineEdit,QTableWidget,QCompleter,QMessageBox,QTableWidgetItem,QHeaderView
+from PyQt5.QtCore import pyqtSlot,Qt,pyqtSignal,QThread
+from PyQt5.QtWidgets import QMainWindow,QApplication,QFileDialog,QTableWidget,QCompleter,QMessageBox,QTableWidgetItem,QHeaderView
 
 from base_main import Ui_MainWindow
 import pyinstall_window
 import site_sources
 import config_window
+from concurrent.futures import ThreadPoolExecutor
+
+
+
 
 class MainWindow(QMainWindow,Ui_MainWindow):
 
@@ -46,20 +50,25 @@ class MainWindow(QMainWindow,Ui_MainWindow):
         self.demo=pyinstall_window.pyinstall_window(self.executable_path)
         self.export_exe_action.triggered.connect(self.demo.show)
 
+        self.download_finish=pyqtSignal()
+        self.pool=ThreadPoolExecutor(max_workers=10)
+
+
+
 
     @pyqtSlot()
     def download_package(self):
+
         download_name=self.lineEdit.text()
         download_site=self.comboBox.currentData()
-        p=None
-        if download_site!="":
-            p=subprocess.run(args=[self.executable_path, "-m", "pip","install",download_name,"-i",download_site ],encoding="gbk",stdout=subprocess.PIPE)
-        else:
-            p=subprocess.run(args=[self.executable_path, "-m", "pip","install",download_name ],encoding="gbk",stdout=subprocess.PIPE)
-            
-        with open("./log/{}.log".format(time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime())),"w",encoding="gbk")as f:
-            f.write(p.stdout)
-        self.update_table()
+        
+        # self.pool.submit(self.download_package,[download_name,download_site])
+
+        self.down_thread=download_thread(self.executable_path,download_name,download_site)
+        self.down_thread.finished.connect(self.update_table)
+        self.down_thread.start()
+
+        
 
 
     @pyqtSlot()
@@ -67,6 +76,7 @@ class MainWindow(QMainWindow,Ui_MainWindow):
         venv_dir = QFileDialog.getExistingDirectory(self, '创建虚拟环境','./')
         if venv_dir!='':
             venv.create(venv_dir,with_pip=True)
+
 
     @pyqtSlot()
     def  open_virtual_environment(self):
@@ -88,13 +98,10 @@ class MainWindow(QMainWindow,Ui_MainWindow):
     def del_package(self):
         value=QMessageBox.warning(self,'test',"确认删除选择的库?",QMessageBox.Yes|QMessageBox.No,QMessageBox.No)
         if value==QMessageBox.Yes:
-            with open("./log/{}.log".format(time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime())),"w",encoding="gbk")as f:
-
-                for idx in self.package_table.selectedIndexes():
-                    p=subprocess.run(args=[self.executable_path, "-m", "pip","uninstall","-y",self.package_table.item(idx.row(),0).text() ],encoding="utf-8",stdout=subprocess.PIPE)
-                    f.write(p.stdout)
-            self.update_table()
-            self.package_table.clearSelection()
+            self.del_thread=delete_thread(self.executable_path,self.package_table)
+            self.del_thread.finished.connect(self.update_table)
+            self.del_thread.finished.connect(self.package_table.clearSelection)
+            self.del_thread.start()
 
     def update_table(self):
         p=subprocess.check_output(args=[self.executable_path, "-m", "pip","list"] ,encoding="utf-8",shell=True)
@@ -120,9 +127,40 @@ class MainWindow(QMainWindow,Ui_MainWindow):
                 idx+=1
         except re.error:
             pass
+    
 
 
 
+class download_thread(QThread):
+    def __init__(self,executable_path,download_name,download_site):
+        super().__init__()
+        self.executable_path=executable_path
+        self.download_name=download_name
+        self.download_site=download_site
+        
+
+    def run(self):
+        p=None
+        if self.download_site!="":
+            p=subprocess.run(args=[self.executable_path, "-m", "pip","install",self.download_name,"-i",self.download_site ],encoding="gbk",stdout=subprocess.PIPE)
+        else:
+            p=subprocess.run(args=[self.executable_path, "-m", "pip","install",self.download_name ],encoding="gbk",stdout=subprocess.PIPE)
+            
+        with open("./log/{}.log".format(time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime())),"w",encoding="gbk")as f:
+            f.write(p.stdout)
+
+
+class delete_thread(QThread):
+    def __init__(self,executable_path,package_table):
+        super().__init__()
+        self.executable_path=executable_path
+        self.package_table=package_table
+
+    def run(self):
+        with open("./log/{}.log".format(time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime())),"w",encoding="gbk")as f:
+                for idx in self.package_table.selectedIndexes():
+                    p=subprocess.run(args=[self.executable_path, "-m", "pip","uninstall","-y",self.package_table.item(idx.row(),0).text() ],encoding="utf-8",stdout=subprocess.PIPE)
+                    f.write(p.stdout)
 
 
 

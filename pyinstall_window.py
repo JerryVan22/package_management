@@ -4,7 +4,8 @@ from PyQt5.QtWidgets import QApplication,QFileDialog
 
 from PyQt5.QtCore import pyqtSlot
 import sys
-import time
+
+import threading
 import subprocess
 try :
     import PyInstaller
@@ -54,12 +55,16 @@ class pyinstall_window(QWidget,Ui_Form):
             self.dir_flag='--onefile'
         else:
             self.dir_flag='--onedir'
+        package_thread=threading.Thread(target=self.thread_package)
+        package_thread.start()
         # print(self.executable_path)
-        p=subprocess.run(args=[self.executable_path, "-m", "PyInstaller",self.console_flag,self.dir_flag,'--noconfirm','--distpath={}'.format(self.output_path.text()),'--icon={}'.format(self.icon_path.text()),self.input_file_path.text()],encoding="gbk",stdout=subprocess.PIPE)
+        
         # with open("./log/{}.log".format(time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime())),"w",encoding="gbk")as f:
         #     f.write(p.stdout)
             
         # PyInstaller.__main__.run([self.console_flag,self.dir_flag,'--noconfirm','--distpath={}'.format(self.output_path.text()),'--icon={}'.format(self.icon_path.text()),self.input_file_path.text()])
+    def thread_package(self):
+        subprocess.run(args=[self.executable_path, "-m", "PyInstaller",self.console_flag,self.dir_flag,'--noconfirm','--distpath={}'.format(self.output_path.text()),'--icon={}'.format(self.icon_path.text()),self.input_file_path.text()],encoding="gbk",stdout=subprocess.PIPE)
 
 
 if __name__=="__main__":
